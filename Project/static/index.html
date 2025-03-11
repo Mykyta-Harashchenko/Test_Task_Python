@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Авторизация, регистрация и чат</title>
+  <style>
+    .hidden { display: none; }
+    .active { display: block; }
+    #chat-history {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+    .message {
+      margin: 5px 0;
+    }
+    .user { color: blue; }
+    .bot { color: green; }
+  </style>
+</head>
+<body>
+
+  <div id="base">
+    <h1>Добро пожаловать!</h1>
+    <button onclick="showLogin()">Войти</button>
+    <button onclick="showRegister()">Зарегистрироваться</button>
+  </div>
+
+  <div id="login-form" class="hidden">
+    <h2>Вход</h2>
+    <input type="text" id="login-email" placeholder="Email">
+    <input type="password" id="login-password" placeholder="Пароль">
+    <button onclick="login()">Войти</button>
+    <button onclick="showBase()">Назад</button>
+    <p id="login-status"></p>
+  </div>
+
+  <div id="register-form" class="hidden">
+    <h2>Регистрация</h2>
+    <input type="text" id="register-email" placeholder="Email">
+    <input type="text" id="username" placeholder="username">
+    <input type="password" id="register-password" placeholder="Пароль">
+    <button onclick="register()">Зарегистрироваться</button>
+    <button onclick="showBase()">Назад</button>
+    <p id="register-status"></p>
+  </div>
+
+  <div id="chat-container" class="hidden">
+    <h2>Чат с нейросетью</h2>
+    <button onclick="logout()">Выйти</button>
+    <div id="chat-history"></div>
+    <input type="text" id="chat-input" placeholder="Введите сообщение" style="width:80%;">
+    <button onclick="sendMessage()">Отправить</button>
+  </div>
+
+  <script>
+    function showBase() {
+      document.getElementById("base").classList.remove("hidden");
+      document.getElementById("login-form").classList.add("hidden");
+      document.getElementById("register-form").classList.add("hidden");
+      document.getElementById("chat-container").classList.add("hidden");
+    }
+
+    function showLogin() {
+      document.getElementById("base").classList.add("hidden");
+      document.getElementById("login-form").classList.remove("hidden");
+      document.getElementById("register-form").classList.add("hidden");
+      document.getElementById("chat-container").classList.add("hidden");
+    }
+
+    function showRegister() {
+      document.getElementById("base").classList.add("hidden");
+      document.getElementById("login-form").classList.add("hidden");
+      document.getElementById("register-form").classList.remove("hidden");
+      document.getElementById("chat-container").classList.add("hidden");
+    }
+
+    function showChat() {
+      document.getElementById("base").classList.add("hidden");
+      document.getElementById("login-form").classList.add("hidden");
+      document.getElementById("register-form").classList.add("hidden");
+      document.getElementById("chat-container").classList.remove("hidden");
+      loadChatHistory();
+    }
+
+async function login() {
+  let email = document.getElementById("login-email").value;
+  let password = document.getElementById("login-password").value;
+
+  try {
+    let response = await fetch("http://localhost:8000/auth/signin", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ username: email, password: password })
+    });
+
+    let data = await response.json();
+    if (!response.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : "Signin failed");
+
+    localStorage.setItem("access_token", data.access_token);
+    document.getElementById("login-status").innerText = "Success";
+    showChat();
+  } catch (error) {
+    console.error("Ошибка при входе:", error);
+    document.getElementById("login-status").innerText = `${error.message}`;
+  }
+}
+
+async function register() {
+  let email = document.getElementById("register-email").value;
+  let username = document.getElementById("username").value;
+  let password = document.getElementById("register-password").value;
+
+  try {
+    let response = await fetch("http://localhost:8000/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, username, password })
+    });
+
+    let data = await response.json();
+    if (!response.ok) throw new Error(data.detail ? JSON.stringify(data.detail) : "Error registering");
+
+    document.getElementById("register-status").innerText = "Success";
+    showChat();
+  } catch (error) {
+    console.error("Ошибка при регистрации:", error);
+    document.getElementById("register-status").innerText = `${error.message}`;
+  }
+}
+
+    // Функция выхода
+    function logout() {
+      localStorage.removeItem("access_token");
+      showBase();
+    }
+
+    // Загрузка истории чата
+    async function loadChatHistory() {
+      let token = localStorage.getItem("access_token");
+      if (!token) {
+        showBase();
+        return;
+      }
+
+      try {
+        let response = await fetch("http://localhost:8000/chat/history", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        let history = await response.json();
+        if (!response.ok) throw new Error("Ошибка загрузки истории");
+
+        const chatHistoryDiv = document.getElementById("chat-history");
+        chatHistoryDiv.innerHTML = "";
+        history.forEach(item => {
+          chatHistoryDiv.innerHTML += `<div class="message user">Вы: ${item.request}</div>`;
+          chatHistoryDiv.innerHTML += `<div class="message bot">Нейросеть: ${item.answer}</div>`;
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // Отправка сообщения
+    async function sendMessage() {
+      let token = localStorage.getItem("access_token");
+      if (!token) {
+        showBase();
+        return;
+      }
+
+      let chatInput = document.getElementById("chat-input");
+      let messageText = chatInput.value.trim();
+      if (!messageText) return;
+
+      let chatHistoryDiv = document.getElementById("chat-history");
+      chatHistoryDiv.innerHTML += `<div class="message user">Вы: ${messageText}</div>`;
+      chatInput.value = "";
+
+      try {
+        let response = await fetch("http://localhost:8000/chat/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ message: messageText })
+        });
+
+        let data = await response.json();
+        if (!response.ok) throw new Error("Ошибка чата");
+
+        chatHistoryDiv.innerHTML += `<div class="message bot">Нейросеть: ${data.response}</div>`;
+      } catch (error) {
+        chatHistoryDiv.innerHTML += `<div class="message bot">Ошибка: ${error.message}</div>`;
+      }
+
+      chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+    }
+  </script>
+
+</body>
+</html>
